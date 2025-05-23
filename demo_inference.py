@@ -45,6 +45,22 @@ def read_intrinsics(path_intrinsics, resize):
             Ks[img_name] = K
     return Ks
 
+def load_intrinsics(path):
+    """
+    Load camera intrinsic parameters from a text file.
+
+    Args:
+        path (str): Path to the text file containing 9 values (3x3 matrix).
+
+    Returns:
+        np.ndarray: 3x3 camera intrinsic matrix (K).
+    """
+    # Read the file and convert space-separated values to floats
+    with open(path, 'r') as f:
+        values = list(map(float, f.read().strip().split()))
+    # Reshape into 3x3 matrix (fx, 0, cx; 0, fy, cy; 0, 0, 1)
+    return np.array(values).reshape(3, 3)
+
 def generate_3d_vis(data, n_matches, root_dir, batch_id,
                     use_3d_color_coded=True, color_src_frame=[223, 71, 28], color_dst_frame=[83, 154, 218],
                     add_dst_lines=True, add_ref_lines=True, add_ref_pts=True, add_points=True,
@@ -69,12 +85,31 @@ def generate_3d_vis(data, n_matches, root_dir, batch_id,
     P[:3, :3] = R
     P[:3, 3] = t
 
+    import pdb;pdb.set_trace()
+
     # Render the image with camera and 3D points
     frame = get_render(P, data, batch_id, point_cloud, color_src_frame, color_dst_frame,
                        angle_y, angle_x, cam_offset_x, cam_offset_y, cam_offset_z, cam_size, size_box, size_2d,
                        add_ref_lines, add_dst_lines, add_ref_pts, add_points, n_matches, max_conf_th, add_confidence)
 
     cv2.imwrite(root_dir + '/3d_vis.png', cv2.cvtColor(np.uint8(frame), cv2.COLOR_BGR2RGB))
+
+def apply_mask(img, mask):
+    """
+    Apply a binary mask to an RGB image to isolate the object.
+
+    Args:
+        img (np.ndarray): Input RGB image.
+        mask (np.ndarray): Binary mask (non-zero where the object is).
+
+    Returns:
+        np.ndarray: Masked image (non-object pixels set to black).
+    """
+    # Convert mask to binary (1 where mask > 0, 0 elsewhere), scale to 255 for OpenCV
+    binary_mask = (mask > 0).astype(np.uint8) * 255
+    # Apply mask to keep only object pixels in the image
+    return cv2.bitwise_and(img, img, mask=binary_mask)
+
 
 def run_demo_inference(args):
 
@@ -94,8 +129,25 @@ def run_demo_inference(args):
     im0 = read_color_image(args.im_path_ref, args.resize).to(device)
     im1 = read_color_image(args.im_path_dst, args.resize).to(device)
 
+    # Load masks (grayscale, unchanged to preserve values)
+    mask0 = cv2.imread(str(args.im_path_ref.replace('rgb', 'masks').replace('jpg', 'png')), cv2.IMREAD_UNCHANGED)
+    mask1 = cv2.imread(str(args.im_path_dst.replace('rgb', 'masks').replace('jpg', 'png')), cv2.IMREAD_UNCHANGED)
+
+    import pdb; pdb.set_trace()
+
+    # Convert masks to binary (1 for object, 0 for background)
+    mask0_bin = (mask0 > 0).astype(np.uint8)
+    mask1_bin = (mask1 > 0).astype(np.uint8)
+
+    import pdb; pdb.set_trace()
+
+    # Apply masks to RGB images to isolate the object
+    im0 = torch.Tensor(apply_mask(im0.squeeze(0).permute(1,2,0).cpu().numpy(), mask0_bin)).permute(2,0,1).unsqueeze(0).to(device)
+    im1 = torch.Tensor(apply_mask(im1.squeeze(0).permute(1,2,0).cpu().numpy(), mask1_bin)).permute(2,0,1).unsqueeze(0).to(device)
+    
     # Load intrinsics
     K = read_intrinsics(args.intrinsics, args.resize)
+    # K = load_intrinsics(args.intrinsics)
 
     # Prepare data for MicKey
     batch_id = 0
@@ -104,8 +156,12 @@ def run_demo_inference(args):
     data = {}
     data['image0'] = im0
     data['image1'] = im1
-    data['K_color0'] = torch.from_numpy(K[im0_name]).unsqueeze(0).to(device)
-    data['K_color1'] = torch.from_numpy(K[im1_name]).unsqueeze(0).to(device)
+    try:
+        data['K_color0'] = torch.from_numpy(K[im0_name]).unsqueeze(0).to(device)
+        data['K_color1'] = torch.from_numpy(K[im1_name]).unsqueeze(0).to(device)
+    except :
+        data['K_color0'] = torch.from_numpy(K).to(device)
+        data['K_color1'] = torch.from_numpy(K).to(device)
 
     # Run inference
     print('Running MicKey relative pose estimation...')
