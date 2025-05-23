@@ -85,14 +85,12 @@ def generate_3d_vis(data, n_matches, root_dir, batch_id,
     P[:3, :3] = R
     P[:3, 3] = t
 
-    import pdb;pdb.set_trace()
-
     # Render the image with camera and 3D points
     frame = get_render(P, data, batch_id, point_cloud, color_src_frame, color_dst_frame,
                        angle_y, angle_x, cam_offset_x, cam_offset_y, cam_offset_z, cam_size, size_box, size_2d,
                        add_ref_lines, add_dst_lines, add_ref_pts, add_points, n_matches, max_conf_th, add_confidence)
 
-    cv2.imwrite(root_dir + '/3d_vis.png', cv2.cvtColor(np.uint8(frame), cv2.COLOR_BGR2RGB))
+    cv2.imwrite(root_dir + '../3d_vis.png', cv2.cvtColor(np.uint8(frame), cv2.COLOR_BGR2RGB))
 
 def apply_mask(img, mask):
     """
@@ -133,13 +131,9 @@ def run_demo_inference(args):
     mask0 = cv2.imread(str(args.im_path_ref.replace('rgb', 'masks').replace('jpg', 'png')), cv2.IMREAD_UNCHANGED)
     mask1 = cv2.imread(str(args.im_path_dst.replace('rgb', 'masks').replace('jpg', 'png')), cv2.IMREAD_UNCHANGED)
 
-    import pdb; pdb.set_trace()
-
     # Convert masks to binary (1 for object, 0 for background)
     mask0_bin = (mask0 > 0).astype(np.uint8)
     mask1_bin = (mask1 > 0).astype(np.uint8)
-
-    import pdb; pdb.set_trace()
 
     # Apply masks to RGB images to isolate the object
     im0 = torch.Tensor(apply_mask(im0.squeeze(0).permute(1,2,0).cpu().numpy(), mask0_bin)).permute(2,0,1).unsqueeze(0).to(device)
