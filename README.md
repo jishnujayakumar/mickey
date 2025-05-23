@@ -3,7 +3,7 @@
 ```shell
 export CUDA_HOME=/usr/local/cuda-12.6/ # use yours
 conda env create -f resources/environment.yml
-conda activate mickey                                                                                   (base) 
+conda activate mickey
 ```
 
 ### Download ckpts
